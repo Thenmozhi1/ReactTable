@@ -1,6 +1,5 @@
 import React from "react";
 import ReactTable from "react-table";
-//import { rows2 } from "./Utils";
 import "react-table/react-table.css";
 import axios from "axios";
 import "./index.css";
@@ -12,9 +11,57 @@ class Department extends React.Component {
     this.state = {
       dep_data: [],
       isLoading: false,
-      filterState: {}
+      filterState: {},
+      pages: -1
     };
   }
+
+  fetchGridData = debounce(async (state, instance) => {
+    let search = null;
+    const filterKeys = Object.keys(this.state.filterState);
+    if (filterKeys.length !== 0) {
+      search = "( ";
+      search += filterKeys
+        .map(key => {
+          return this.state.filterState[key]
+            ? key + ":" + this.state.filterState[key]
+            : "";
+        })
+        .join(" and ");
+      search += " )";
+    }
+    const params = {
+      page: state.page,
+      size: state.pageSize,
+      sort: state.sorted["0"]
+        ? state.sorted["0"].id +
+          "," +
+          (state.sorted["0"].desc === false ? "desc" : "asc")
+        : "deptid",
+      search
+    };
+    this.setState({
+      isLoading: true
+    });
+
+    const json = await axios.get(
+      "https://genericspringrest.herokuapp.com/department",
+      { params }
+    );
+
+    const newData = json.data.content.map(result => ({
+      deptid: result.deptid,
+      deptname: result.deptname
+      //  depthead: result.depthead
+    }));
+
+    this.setState({
+      ...this.state,
+      dep_data: newData,
+      isLoading: false,
+      pages: json.data.totalPages
+    });
+  }, 500);
 
   handleChange = (onChange, identifier) => {
     return e => {
@@ -27,6 +74,7 @@ class Department extends React.Component {
       onChange();
     };
   };
+
   getFilterValueFromState = (identifier, defaultValue = "") => {
     const filterState = this.state.filterState;
     if (!filterState) {
@@ -40,65 +88,18 @@ class Department extends React.Component {
     }
     return defaultValue;
   };
-  fetchGridData = debounce((state, instance) => {
-    let url = "";
-    const params = {
-      page: state.page,
-      size: state.pageSize,
-      sort: state.sorted["0"]
-        ? state.sorted["0"].id +
-          "," +
-          (state.sorted["0"].desc === false ? "desc" : "asc")
-        : "deptid"
-    };
-    if (Object.keys(this.state.filterState).length !== 0) {
-      url = "/search/byadvsearch?advsearch=( ";
-      let count = 0;
-      for (let key in this.state.filterState) {
-        if (this.state.filterState.hasOwnProperty(key)) {
-          let val = this.state.filterState[key];
-          count++;
-          if (count === 1) url += key + ":" + val;
-          else url += "and" + key + ":" + val;
-        }
-      }
-      url += " )";
-    }
-    this.setState({ isLoading: true });
-    console.log(state);
-    console.log(instance);
-    axios
-      .get("https://spring-employee.herokuapp.com/departments" + url, {
-        params
-      })
-      .then(json =>
-        json.data.content.map(result => ({
-          deptid: result.deptid,
-          deptname: result.deptname,
-          DeptHead: result.depthead.empname
-        }))
-      )
-
-      .then(newData =>
-        this.setState({
-          ...this.state,
-          dep_data: newData,
-          isLoading: false
-        })
-      )
-
-      .catch(function(error) {
-        console.log(error);
-      });
-  }, 500);
 
   render() {
-    const { dep_data, isLoading } = this.state;
+    const { dep_data, isLoading, pages } = this.state;
     return (
       <div>
         <ReactTable
           data={dep_data}
           filterable
+          pages={pages}
+          showPagination={true}
+          showPaginationTop={true}
+          showPaginationBottom={true}
           manual
           minRows={0}
           loading={isLoading}
@@ -138,17 +139,16 @@ class Department extends React.Component {
             },
             {
               Header: "DeptHead",
-              accessor: "DeptHead",
+              accessor: "depthead",
               Filter: ({ filter, onChange }) => (
                 <input
                   type="text"
-                  size="8"
-                  onChange={this.handleChange(onChange, "DeptHead")}
                   value={
-                    this.state.filterState.DeptHead
-                      ? this.state.filterState.DeptHead
+                    this.state.filterState.depthead
+                      ? this.state.filterState.depthead
                       : ""
                   }
+                  onChange={this.handleChange(onChange, "depthead")}
                 />
               )
             }
